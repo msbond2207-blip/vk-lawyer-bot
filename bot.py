@@ -91,6 +91,7 @@ def main_keyboard(uid=None):
     kb.add(Text("📊 Статистика"), color=KeyboardButtonColor.SECONDARY)
     kb.row()
     kb.add(Text("⭐ Оставить отзыв"), color=KeyboardButtonColor.SECONDARY)
+    kb.add(Text("📣 Отзывы"), color=KeyboardButtonColor.SECONDARY)
     if uid == ADMIN_ID:
         kb.row()
         kb.add(Text("🔙 Вернуться в админ-панель"), color=KeyboardButtonColor.POSITIVE)
@@ -315,6 +316,36 @@ async def review_start(message: Message):
     )
 
 
+@bot.on.message(text="📣 Отзывы")
+async def public_reviews(message: Message):
+    uid = message.from_id
+    reviews = load(REVIEWS_FILE, [])
+    if not reviews:
+        text = "📣 Пока нет отзывов. Будьте первым!"
+    else:
+        text = "📣 ОТЗЫВЫ КЛИЕНТОВ\n━━━━━━━━━━━━━━━━━\n\n"
+        count = 0
+        for r in reversed(reviews):
+            if count >= 10:
+                break
+            stars = "⭐" * r["rating"]
+            date = r.get("date", "—")
+            review_text = r.get("text", "")
+            text += stars + " (" + str(r["rating"]) + "/5) — " + date + "\n"
+            text += review_text + "\n\n"
+            count += 1
+        text += "━━━━━━━━━━━━━━━━━\n"
+        total = len(reviews)
+        avg = round(sum(r["rating"] for r in reviews) / total, 1)
+        text += "Всего отзывов: " + str(total) + "\n"
+        text += "Средний рейтинг: " + str(avg) + " / 5.0"
+    if uid == ADMIN_ID and admin_mode.get(uid) == "admin":
+        kb = admin_keyboard()
+    else:
+        kb = main_keyboard(uid)
+    await message.answer(text, keyboard=kb)
+
+
 @bot.on.message(text="📋 Список дел")
 async def list_cases(message: Message):
     if message.from_id != ADMIN_ID:
@@ -359,10 +390,12 @@ async def all_reviews(message: Message):
     if not reviews:
         await message.answer("Отзывов пока нет.", keyboard=admin_keyboard())
         return
-    text = "⭐ Все отзывы:\n\n"
+    text = "⭐ Все отзывы (с именами):\n\n"
     for r in reviews[-20:]:
         stars = "⭐" * r["rating"]
-        text += stars + " (" + str(r["rating"]) + "/5) — " + r["date"] + "\n" + r["text"] + "\n\n"
+        text += stars + " (" + str(r["rating"]) + "/5) — " + r["date"] + "\n"
+        text += "От: vk.com/id" + str(r.get("vk_id", "—")) + "\n"
+        text += r["text"] + "\n\n"
     await message.answer(text, keyboard=admin_keyboard())
 
 
@@ -467,6 +500,11 @@ async def universal_handler(message: Message):
         text = message.text.strip()
     else:
         text = ""
+
+    # ВАЖНО: пропускаем кнопки "Выиграно/Проиграно" к won_case/lost_case
+    if text.startswith("✅ Выиграно #") or text.startswith("❌ Проиграно #"):
+        return
+
     if uid not in user_state:
         return
     state = user_state[uid]
@@ -690,7 +728,7 @@ async def universal_handler(message: Message):
 async def won_case(message: Message):
     if message.from_id != ADMIN_ID:
         return
-    case_id = message.text.split("#")[1]
+    case_id = message.text.split("#")[1].strip()
     stats = load(STATS_FILE, {"total": 0, "won": 0, "lost": 0, "emergency": 0, "ratings": []})
     stats["won"] += 1
     save(STATS_FILE, stats)
@@ -698,14 +736,14 @@ async def won_case(message: Message):
     if case_id in cases:
         cases[case_id]["status"] = "closed"
         save(CASES_FILE, cases)
-    await message.answer("🏆 ВЫИГРАНО!", keyboard=admin_keyboard())
+    await message.answer("🏆 Дело #" + case_id + " ВЫИГРАНО!", keyboard=admin_keyboard())
 
 
 @bot.on.message(text=lambda m: m.text and m.text.startswith("❌ Проиграно #"))
 async def lost_case(message: Message):
     if message.from_id != ADMIN_ID:
         return
-    case_id = message.text.split("#")[1]
+    case_id = message.text.split("#")[1].strip()
     stats = load(STATS_FILE, {"total": 0, "won": 0, "lost": 0, "emergency": 0, "ratings": []})
     stats["lost"] += 1
     save(STATS_FILE, stats)
@@ -713,7 +751,7 @@ async def lost_case(message: Message):
     if case_id in cases:
         cases[case_id]["status"] = "closed"
         save(CASES_FILE, cases)
-    await message.answer("❌ Проиграно.", keyboard=admin_keyboard())
+    await message.answer("❌ Дело #" + case_id + " проиграно.", keyboard=admin_keyboard())
 
 
 if __name__ == "__main__":
