@@ -6,6 +6,9 @@ from vkbottle.bot import Bot, Message
 from vkbottle import Keyboard
 from vkbottle import KeyboardButtonColor, Text
 
+# ============================================================
+# НАСТРОЙКИ
+# ============================================================
 TOKEN = "vk1.a.ecbtcW2hykGmDFJUGeXZkZ7OTO6M9PCUgV-_dsfhp0ni-1Ao5Bx_stngT_jTw7MFaJnfohMqNhTgOTVjQGOjIeJqryWXipmHvsLLQjIDyPUgVMG4w5NbczMQJPUADosV2fGNaLyYWrQxv306SdzQNK5rK1DI9sHdN0Ojb4ZECtdnh9irdW1H6SaLBPmrntcOpjUtnG5EhSJQa_B-xuD8uA"
 ADMIN_ID = 758865307
 
@@ -20,6 +23,9 @@ PORTFOLIO_FILE = "portfolio.json"
 bot = Bot(token=TOKEN)
 
 
+# ============================================================
+# ХРАНИЛИЩЕ
+# ============================================================
 def load(file, default):
     if os.path.exists(file):
         with open(file, "r", encoding="utf-8") as f:
@@ -78,6 +84,9 @@ DEFAULT_PROFILE = (
 )
 
 
+# ============================================================
+# КЛАВИАТУРЫ
+# ============================================================
 def main_keyboard(uid=None):
     kb = Keyboard(one_time=False)
     kb.add(Text("📝 Заполнить анкету"), color=KeyboardButtonColor.PRIMARY)
@@ -138,11 +147,16 @@ def evidence_keyboard():
 
 def close_result_keyboard(case_id):
     kb = Keyboard(one_time=True)
-    kb.add(Text("✅ Выиграно #" + str(case_id)), color=KeyboardButtonColor.POSITIVE)
-    kb.add(Text("❌ Проиграно #" + str(case_id)), color=KeyboardButtonColor.NEGATIVE)
+    kb.add(Text("✅В#" + str(case_id)), color=KeyboardButtonColor.POSITIVE)
+    kb.add(Text("❌П#" + str(case_id)), color=KeyboardButtonColor.NEGATIVE)
     return kb.get_json()
 
 
+# ============================================================
+# ХЭНДЛЕРЫ (порядок важен!)
+# ============================================================
+
+# --- 1. СТАРТ ---
 @bot.on.message(text=["/start", "начать", "Начать"])
 async def start_handler(message: Message):
     uid = message.from_id
@@ -150,29 +164,24 @@ async def start_handler(message: Message):
     if uid == ADMIN_ID:
         admin_mode[uid] = "admin"
         await message.answer(
-            "👨‍⚖️ Панель адвоката Kai Schwartz\n\n"
-            "Ты — админ.",
+            "👨‍⚖️ Панель адвоката Kai Schwartz\n\nТы — админ.",
             keyboard=admin_keyboard()
         )
     else:
         await message.answer(
-            "👋 Здравствуйте, я адвокат Kai Schwartz "
-            "на Arizona Mobile 1.\n\n"
-            "Выберите действие 👇",
+            "👋 Здравствуйте, я адвокат Kai Schwartz на Arizona Mobile 1.\n\nВыберите действие 👇",
             keyboard=main_keyboard(uid)
         )
 
 
+# --- 2. ПЕРЕКЛЮЧЕНИЕ РЕЖИМОВ ---
 @bot.on.message(text="👤 Режим клиента")
 async def switch_to_client(message: Message):
     uid = message.from_id
     if uid != ADMIN_ID:
         return
     admin_mode[uid] = "client"
-    await message.answer(
-        "👤 Режим клиента включён.",
-        keyboard=main_keyboard(uid)
-    )
+    await message.answer("👤 Режим клиента включён.", keyboard=main_keyboard(uid))
 
 
 @bot.on.message(text="🔙 Вернуться в админ-панель")
@@ -181,12 +190,10 @@ async def switch_to_admin(message: Message):
     if uid != ADMIN_ID:
         return
     admin_mode[uid] = "admin"
-    await message.answer(
-        "👨‍⚖️ Ты снова в админ-панели.",
-        keyboard=admin_keyboard()
-    )
+    await message.answer("👨‍⚖️ Ты снова в админ-панели.", keyboard=admin_keyboard())
 
 
+# --- 3. ОТМЕНА ---
 @bot.on.message(text="❌ Отмена")
 async def cancel_handler(message: Message):
     uid = message.from_id
@@ -198,24 +205,50 @@ async def cancel_handler(message: Message):
     await message.answer("❌ Отменено.", keyboard=kb)
 
 
+# --- 4. ИТОГИ ДЕЛА (ловим ТОЛЬКО "✅В#N" и "❌П#N") ---
+@bot.on.message(text=lambda m: m.text and m.text.startswith("✅В#"))
+async def won_case(message: Message):
+    if message.from_id != ADMIN_ID:
+        return
+    case_id = message.text.replace("✅В#", "").strip()
+    stats = load(STATS_FILE, {"total": 0, "won": 0, "lost": 0, "emergency": 0, "ratings": []})
+    stats["won"] += 1
+    save(STATS_FILE, stats)
+    cases = load(CASES_FILE, {})
+    if case_id in cases:
+        cases[case_id]["status"] = "closed"
+        save(CASES_FILE, cases)
+    await message.answer("🏆 Дело #" + case_id + " ВЫИГРАНО!", keyboard=admin_keyboard())
+
+
+@bot.on.message(text=lambda m: m.text and m.text.startswith("❌П#"))
+async def lost_case(message: Message):
+    if message.from_id != ADMIN_ID:
+        return
+    case_id = message.text.replace("❌П#", "").strip()
+    stats = load(STATS_FILE, {"total": 0, "won": 0, "lost": 0, "emergency": 0, "ratings": []})
+    stats["lost"] += 1
+    save(STATS_FILE, stats)
+    cases = load(CASES_FILE, {})
+    if case_id in cases:
+        cases[case_id]["status"] = "closed"
+        save(CASES_FILE, cases)
+    await message.answer("❌ Дело #" + case_id + " проиграно.", keyboard=admin_keyboard())
+
+
+# --- 5. КЛИЕНТСКИЕ КНОПКИ ---
 @bot.on.message(text="📝 Заполнить анкету")
 async def form_start(message: Message):
     uid = message.from_id
     user_state[uid] = {"step": "nickname", "data": {}}
-    await message.answer(
-        "1️⃣ Введите ваш игровой ник:",
-        keyboard=cancel_keyboard()
-    )
+    await message.answer("1️⃣ Введите ваш игровой ник:", keyboard=cancel_keyboard())
 
 
 @bot.on.message(text="🆘 ЭКСТРЕННЫЙ ВЫЗОВ")
 async def emergency_start(message: Message):
     uid = message.from_id
     user_state[uid] = {"step": "em_nick", "data": {}}
-    await message.answer(
-        "🆘 ЭКСТРЕННЫЙ ВЫЗОВ\n\n1️⃣ Ваш игровой ник:",
-        keyboard=cancel_keyboard()
-    )
+    await message.answer("🆘 ЭКСТРЕННЫЙ ВЫЗОВ\n\n1️⃣ Ваш игровой ник:", keyboard=cancel_keyboard())
 
 
 @bot.on.message(text="💰 Прайс-лист")
@@ -267,10 +300,7 @@ async def portfolio_handler(message: Message):
 @bot.on.message(text=["📊 Статистика", "📊 Моя статистика"])
 async def stats_handler(message: Message):
     uid = message.from_id
-    s = load(
-        STATS_FILE,
-        {"total": 0, "won": 0, "lost": 0, "emergency": 0, "ratings": []}
-    )
+    s = load(STATS_FILE, {"total": 0, "won": 0, "lost": 0, "emergency": 0, "ratings": []})
     won = s["won"]
     lost = s["lost"]
     if (won + lost) > 0:
@@ -310,10 +340,7 @@ async def review_start(message: Message):
     kb.row()
     kb.add(Text("2"), color=KeyboardButtonColor.NEGATIVE)
     kb.add(Text("1"), color=KeyboardButtonColor.NEGATIVE)
-    await message.answer(
-        "⭐ Оцените работу адвоката от 1 до 5:",
-        keyboard=kb.get_json()
-    )
+    await message.answer("⭐ Оцените работу адвоката от 1 до 5:", keyboard=kb.get_json())
 
 
 @bot.on.message(text="📣 Отзывы")
@@ -346,6 +373,7 @@ async def public_reviews(message: Message):
     await message.answer(text, keyboard=kb)
 
 
+# --- 6. АДМИН-КНОПКИ ---
 @bot.on.message(text="📋 Список дел")
 async def list_cases(message: Message):
     if message.from_id != ADMIN_ID:
@@ -404,10 +432,7 @@ async def take_case_start(message: Message):
     if message.from_id != ADMIN_ID:
         return
     user_state[message.from_id] = {"step": "take_id", "data": {}}
-    await message.answer(
-        "Введите номер дела:",
-        keyboard=cancel_keyboard()
-    )
+    await message.answer("Введите номер дела:", keyboard=cancel_keyboard())
 
 
 @bot.on.message(text="✅ Закрыть дело")
@@ -415,10 +440,7 @@ async def close_case_start(message: Message):
     if message.from_id != ADMIN_ID:
         return
     user_state[message.from_id] = {"step": "close_id", "data": {}}
-    await message.answer(
-        "Введите номер дела для закрытия:",
-        keyboard=cancel_keyboard()
-    )
+    await message.answer("Введите номер дела для закрытия:", keyboard=cancel_keyboard())
 
 
 @bot.on.message(text="➕ Добавить в портфолио")
@@ -426,10 +448,7 @@ async def add_portfolio_start(message: Message):
     if message.from_id != ADMIN_ID:
         return
     user_state[message.from_id] = {"step": "pf_type", "data": {}}
-    await message.answer(
-        "Тип дела:",
-        keyboard=cancel_keyboard()
-    )
+    await message.answer("Тип дела:", keyboard=cancel_keyboard())
 
 
 @bot.on.message(text="🗑 Удалить дело")
@@ -437,10 +456,7 @@ async def delete_case_start(message: Message):
     if message.from_id != ADMIN_ID:
         return
     user_state[message.from_id] = {"step": "del_id", "data": {}}
-    await message.answer(
-        "Введите номер дела для удаления:",
-        keyboard=cancel_keyboard()
-    )
+    await message.answer("Введите номер дела для удаления:", keyboard=cancel_keyboard())
 
 
 @bot.on.message(text="✏️ Изменить прайс")
@@ -448,10 +464,7 @@ async def edit_price_start(message: Message):
     if message.from_id != ADMIN_ID:
         return
     user_state[message.from_id] = {"step": "edit_price", "data": {}}
-    await message.answer(
-        "Отправь новый текст прайс-листа:",
-        keyboard=cancel_keyboard()
-    )
+    await message.answer("Отправь новый текст прайс-листа:", keyboard=cancel_keyboard())
 
 
 @bot.on.message(text="✏️ Изменить резюме")
@@ -459,10 +472,7 @@ async def edit_profile_start(message: Message):
     if message.from_id != ADMIN_ID:
         return
     user_state[message.from_id] = {"step": "edit_profile", "data": {}}
-    await message.answer(
-        "Отправь новый текст резюме:",
-        keyboard=cancel_keyboard()
-    )
+    await message.answer("Отправь новый текст резюме:", keyboard=cancel_keyboard())
 
 
 @bot.on.message(text="📤 Экспорт дел")
@@ -493,42 +503,7 @@ async def export_cases(message: Message):
     await message.answer("✅ Экспорт завершён.", keyboard=admin_keyboard())
 
 
-@bot.on.message(text=lambda m: m.text and "Выиграно" in m.text and "#" in m.text)
-async def won_case(message: Message):
-    if message.from_id != ADMIN_ID:
-        return
-    parts = message.text.split("#")
-    if len(parts) < 2:
-        return
-    case_id = parts[1].strip().split()[0]
-    stats = load(STATS_FILE, {"total": 0, "won": 0, "lost": 0, "emergency": 0, "ratings": []})
-    stats["won"] += 1
-    save(STATS_FILE, stats)
-    cases = load(CASES_FILE, {})
-    if case_id in cases:
-        cases[case_id]["status"] = "closed"
-        save(CASES_FILE, cases)
-    await message.answer("🏆 Дело #" + case_id + " ВЫИГРАНО!", keyboard=admin_keyboard())
-
-
-@bot.on.message(text=lambda m: m.text and "Проиграно" in m.text and "#" in m.text)
-async def lost_case(message: Message):
-    if message.from_id != ADMIN_ID:
-        return
-    parts = message.text.split("#")
-    if len(parts) < 2:
-        return
-    case_id = parts[1].strip().split()[0]
-    stats = load(STATS_FILE, {"total": 0, "won": 0, "lost": 0, "emergency": 0, "ratings": []})
-    stats["lost"] += 1
-    save(STATS_FILE, stats)
-    cases = load(CASES_FILE, {})
-    if case_id in cases:
-        cases[case_id]["status"] = "closed"
-        save(CASES_FILE, cases)
-    await message.answer("❌ Дело #" + case_id + " проиграно.", keyboard=admin_keyboard())
-
-
+# --- 7. УНИВЕРСАЛЬНЫЙ ОБРАБОТЧИК (ПОСЛЕДНИЙ!) ---
 @bot.on.message()
 async def universal_handler(message: Message):
     uid = message.from_id
@@ -537,14 +512,9 @@ async def universal_handler(message: Message):
     else:
         text = ""
 
-    # Пропускаем кнопки итога — они ловятся в won_case/lost_case
-    if "Выиграно" in text and "#" in text:
-        return
-    if "Проиграно" in text and "#" in text:
-        return
-
     if uid not in user_state:
         return
+
     state = user_state[uid]
     step = state["step"]
     data = state["data"]
@@ -554,6 +524,7 @@ async def universal_handler(message: Message):
             return admin_keyboard()
         return main_keyboard(uid)
 
+    # ---- АНКЕТА ----
     if step == "nickname":
         data["nickname"] = text
         state["step"] = "position"
@@ -613,13 +584,11 @@ async def universal_handler(message: Message):
                     "📞 " + data["contact"] + "\n"
                     "🔗 vk.com/id" + str(uid)
                 )
-                await bot.api.messages.send(
-                    user_id=ADMIN_ID,
-                    message=adm_text,
-                    random_id=0
-                )
+                await bot.api.messages.send(user_id=ADMIN_ID, message=adm_text, random_id=0)
             except Exception:
                 pass
+
+    # ---- ЭКСТРЕННЫЙ ВЫЗОВ ----
     elif step == "em_nick":
         data["nickname"] = text
         state["step"] = "em_place"
@@ -655,13 +624,11 @@ async def universal_handler(message: Message):
                     "⚡ " + data["situation"] + "\n"
                     "🔗 vk.com/id" + str(uid)
                 )
-                await bot.api.messages.send(
-                    user_id=ADMIN_ID,
-                    message=adm_text,
-                    random_id=0
-                )
+                await bot.api.messages.send(user_id=ADMIN_ID, message=adm_text, random_id=0)
             except Exception:
                 pass
+
+    # ---- ОТЗЫВ ----
     elif step == "rev_rate":
         try:
             r = int(text)
@@ -691,18 +658,14 @@ async def universal_handler(message: Message):
             try:
                 stars = "⭐" * state["data"]["rating"]
                 adm_text = (
-                    "⭐ ОТЗЫВ\n"
-                    + stars + " (" + str(state["data"]["rating"]) + "/5)\n"
-                    "От: vk.com/id" + str(uid) + "\n"
-                    + text
+                    "⭐ ОТЗЫВ\n" + stars + " (" + str(state["data"]["rating"]) + "/5)\n"
+                    "От: vk.com/id" + str(uid) + "\n" + text
                 )
-                await bot.api.messages.send(
-                    user_id=ADMIN_ID,
-                    message=adm_text,
-                    random_id=0
-                )
+                await bot.api.messages.send(user_id=ADMIN_ID, message=adm_text, random_id=0)
             except Exception:
                 pass
+
+    # ---- ВЗЯТЬ ДЕЛО ----
     elif step == "take_id":
         cases = load(CASES_FILE, {})
         if text in cases:
@@ -712,6 +675,8 @@ async def universal_handler(message: Message):
             await message.answer("⚙️ Дело #" + text + " в работе!", keyboard=admin_keyboard())
         else:
             await message.answer("❌ Дело не найдено.", keyboard=cancel_keyboard())
+
+    # ---- ЗАКРЫТЬ ДЕЛО ----
     elif step == "close_id":
         cases = load(CASES_FILE, {})
         if text in cases:
@@ -720,6 +685,8 @@ async def universal_handler(message: Message):
             await message.answer("Дело #" + text + " закрыто. Итог?", keyboard=kb)
         else:
             await message.answer("❌ Дело не найдено.", keyboard=cancel_keyboard())
+
+    # ---- ПОРТФОЛИО ----
     elif step == "pf_type":
         data["case_type"] = text
         state["step"] = "pf_client"
@@ -743,6 +710,8 @@ async def universal_handler(message: Message):
         save(PORTFOLIO_FILE, portfolio)
         user_state.pop(uid, None)
         await message.answer("✅ Добавлено в портфолио!", keyboard=admin_keyboard())
+
+    # ---- УДАЛИТЬ ДЕЛО ----
     elif step == "del_id":
         cases = load(CASES_FILE, {})
         if text in cases:
@@ -752,16 +721,23 @@ async def universal_handler(message: Message):
             await message.answer("🗑 Дело #" + text + " удалено.", keyboard=admin_keyboard())
         else:
             await message.answer("❌ Дело не найдено.", keyboard=cancel_keyboard())
+
+    # ---- ИЗМЕНИТЬ ПРАЙС ----
     elif step == "edit_price":
         save(PRICE_FILE, {"text": text})
         user_state.pop(uid, None)
         await message.answer("✅ Прайс обновлён!", keyboard=admin_keyboard())
+
+    # ---- ИЗМЕНИТЬ РЕЗЮМЕ ----
     elif step == "edit_profile":
         save(PROFILE_FILE, {"text": text})
         user_state.pop(uid, None)
         await message.answer("✅ Резюме обновлено!", keyboard=admin_keyboard())
 
 
+# ============================================================
+# ЗАПУСК
+# ============================================================
 if __name__ == "__main__":
     print("🤖 VK-бот запущен!")
     bot.run_forever()
