@@ -493,6 +493,42 @@ async def export_cases(message: Message):
     await message.answer("✅ Экспорт завершён.", keyboard=admin_keyboard())
 
 
+@bot.on.message(text=lambda m: m.text and "Выиграно" in m.text and "#" in m.text)
+async def won_case(message: Message):
+    if message.from_id != ADMIN_ID:
+        return
+    parts = message.text.split("#")
+    if len(parts) < 2:
+        return
+    case_id = parts[1].strip().split()[0]
+    stats = load(STATS_FILE, {"total": 0, "won": 0, "lost": 0, "emergency": 0, "ratings": []})
+    stats["won"] += 1
+    save(STATS_FILE, stats)
+    cases = load(CASES_FILE, {})
+    if case_id in cases:
+        cases[case_id]["status"] = "closed"
+        save(CASES_FILE, cases)
+    await message.answer("🏆 Дело #" + case_id + " ВЫИГРАНО!", keyboard=admin_keyboard())
+
+
+@bot.on.message(text=lambda m: m.text and "Проиграно" in m.text and "#" in m.text)
+async def lost_case(message: Message):
+    if message.from_id != ADMIN_ID:
+        return
+    parts = message.text.split("#")
+    if len(parts) < 2:
+        return
+    case_id = parts[1].strip().split()[0]
+    stats = load(STATS_FILE, {"total": 0, "won": 0, "lost": 0, "emergency": 0, "ratings": []})
+    stats["lost"] += 1
+    save(STATS_FILE, stats)
+    cases = load(CASES_FILE, {})
+    if case_id in cases:
+        cases[case_id]["status"] = "closed"
+        save(CASES_FILE, cases)
+    await message.answer("❌ Дело #" + case_id + " проиграно.", keyboard=admin_keyboard())
+
+
 @bot.on.message()
 async def universal_handler(message: Message):
     uid = message.from_id
@@ -501,8 +537,10 @@ async def universal_handler(message: Message):
     else:
         text = ""
 
-    # ВАЖНО: пропускаем кнопки "Выиграно/Проиграно" к won_case/lost_case
-    if text.startswith("✅ Выиграно #") or text.startswith("❌ Проиграно #"):
+    # Пропускаем кнопки итога — они ловятся в won_case/lost_case
+    if "Выиграно" in text and "#" in text:
+        return
+    if "Проиграно" in text and "#" in text:
         return
 
     if uid not in user_state:
@@ -722,36 +760,6 @@ async def universal_handler(message: Message):
         save(PROFILE_FILE, {"text": text})
         user_state.pop(uid, None)
         await message.answer("✅ Резюме обновлено!", keyboard=admin_keyboard())
-
-
-@bot.on.message(text=lambda m: m.text and m.text.startswith("✅ Выиграно #"))
-async def won_case(message: Message):
-    if message.from_id != ADMIN_ID:
-        return
-    case_id = message.text.split("#")[1].strip()
-    stats = load(STATS_FILE, {"total": 0, "won": 0, "lost": 0, "emergency": 0, "ratings": []})
-    stats["won"] += 1
-    save(STATS_FILE, stats)
-    cases = load(CASES_FILE, {})
-    if case_id in cases:
-        cases[case_id]["status"] = "closed"
-        save(CASES_FILE, cases)
-    await message.answer("🏆 Дело #" + case_id + " ВЫИГРАНО!", keyboard=admin_keyboard())
-
-
-@bot.on.message(text=lambda m: m.text and m.text.startswith("❌ Проиграно #"))
-async def lost_case(message: Message):
-    if message.from_id != ADMIN_ID:
-        return
-    case_id = message.text.split("#")[1].strip()
-    stats = load(STATS_FILE, {"total": 0, "won": 0, "lost": 0, "emergency": 0, "ratings": []})
-    stats["lost"] += 1
-    save(STATS_FILE, stats)
-    cases = load(CASES_FILE, {})
-    if case_id in cases:
-        cases[case_id]["status"] = "closed"
-        save(CASES_FILE, cases)
-    await message.answer("❌ Дело #" + case_id + " проиграно.", keyboard=admin_keyboard())
 
 
 if __name__ == "__main__":
