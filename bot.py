@@ -1,6 +1,5 @@
 import os
 import json
-import requests
 from datetime import datetime
 
 from vkbottle.bot import Bot, Message
@@ -9,8 +8,8 @@ from vkbottle import KeyboardButtonColor, Text
 
 TOKEN = "vk1.a.ecbtcW2hykGmDFJUGeXZkZ7OTO6M9PCUgV-_dsfhp0ni-1Ao5Bx_stngT_jTw7MFaJnfohMqNhTgOTVjQGOjIeJqryWXipmHvsLLQjIDyPUgVMG4w5NbczMQJPUADosV2fGNaLyYWrQxv306SdzQNK5rK1DI9sHdN0Ojb4ZECtdnh9irdW1H6SaLBPmrntcOpjUtnG5EhSJQa_B-xuD8uA"
 ADMIN_ID = 758865307
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL = "gemini-2.5-pro"
+RESET_PASSWORD = "kaischwartz22072011"
+
 CASES_FILE = "cases.json"
 STATS_FILE = "stats.json"
 REVIEWS_FILE = "reviews.json"
@@ -32,43 +31,6 @@ def load(file, default):
 def save(file, data):
     with open(file, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-
-
-def load_laws():
-    if os.path.exists("laws.txt"):
-        with open("laws.txt", "r", encoding="utf-8") as f:
-            return f.read()
-    return "Законы не загружены."
-
-
-def ask_gemini(question):
-    laws = load_laws()
-    prompt = (
-        "Ты — адвокат Kai Schwartz на Arizona Mobile 1. "
-        "Помогаешь с юридическими вопросами. "
-        "Отвечай кратко, по делу, ссылайся на статьи.\n\n"
-        "ЗАКОНЫ СЕРВЕРА:\n" + laws + "\n\n"
-        "ВОПРОС ПОЛЬЗОВАТЕЛЯ:\n" + question + "\n\n"
-        "ОТВЕТ:"
-    )
-    url = (
-        "https://generativelanguage.googleapis.com/"
-        "v1beta/models/" + GEMINI_MODEL + ":generateContent?key=" + GEMINI_API_KEY
-    )
-    body = {
-        "contents": [
-            {"parts": [{"text": prompt}]}
-        ]
-    }
-    try:
-        response = requests.post(url, json=body, timeout=30)
-        data = response.json()
-        if "candidates" in data and len(data["candidates"]) > 0:
-            return data["candidates"][0]["content"]["parts"][0]["text"]
-        else:
-            return "❌ Не удалось получить ответ от AI. Попробуйте позже."
-    except Exception as e:
-        return "❌ Ошибка AI: " + str(e)
 
 
 admin_mode = {}
@@ -122,8 +84,6 @@ def main_keyboard(uid=None):
     kb.add(Text("📝 Заполнить анкету"), color=KeyboardButtonColor.PRIMARY)
     kb.row()
     kb.add(Text("🆘 ЭКСТРЕННЫЙ ВЫЗОВ"), color=KeyboardButtonColor.NEGATIVE)
-    kb.row()
-    kb.add(Text("🤖 Спросить AI"), color=KeyboardButtonColor.PRIMARY)
     kb.row()
     kb.add(Text("💰 Прайс-лист"), color=KeyboardButtonColor.SECONDARY)
     kb.add(Text("📁 Обо мне"), color=KeyboardButtonColor.SECONDARY)
@@ -238,20 +198,6 @@ async def emergency_start(message: Message):
     uid = message.from_id
     user_state[uid] = {"step": "em_nick", "data": {}}
     await message.answer("🆘 ЭКСТРЕННЫЙ ВЫЗОВ\n\n1️⃣ Ваш игровой ник:", keyboard=cancel_keyboard())
-
-
-@bot.on.message(text="🤖 Спросить AI")
-async def ask_ai_start(message: Message):
-    uid = message.from_id
-    user_state[uid] = {"step": "ai_question", "data": {}}
-    await message.answer(
-        "🤖 AI-АССИСТЕНТ\n"
-        "━━━━━━━━━━━━━━━━━\n\n"
-        "Задайте юридический вопрос.\n"
-        "Например: «Какая статья за ограбление?»\n\n"
-        "Напишите вопрос:",
-        keyboard=cancel_keyboard()
-    )
 
 
 @bot.on.message(text="💰 Прайс-лист")
@@ -531,20 +477,8 @@ async def universal_handler(message: Message):
             return admin_keyboard()
         return main_keyboard(uid)
 
-    if step == "ai_question":
-        await message.answer("⏳ Отправляю запрос в AI...")
-        answer = ask_gemini(text)
-        user_state.pop(uid, None)
-        await message.answer(
-            "🤖 ОТВЕТ AI:\n"
-            "━━━━━━━━━━━━━━━━━\n\n"
-            + answer,
-            keyboard=get_kb()
-        )
-        return
-
     if step == "reset_pass":
-        if text == "kaischwartz22072011":
+        if text == RESET_PASSWORD:
             save(STATS_FILE, {"total": 0, "won": 0, "lost": 0, "emergency": 0, "ratings": []})
             save(REVIEWS_FILE, [])
             save(CASES_FILE, {})
@@ -757,3 +691,27 @@ async def universal_handler(message: Message):
         portfolio = load(PORTFOLIO_FILE, [])
         portfolio.append(data)
         save(PORTFOLIO_FILE, portfolio)
+        user_state.pop(uid, None)
+        await message.answer("✅ Добавлено в портфолио!", keyboard=admin_keyboard())
+    elif step == "del_id":
+        cases = load(CASES_FILE, {})
+        if text in cases:
+            del cases[text]
+            save(CASES_FILE, cases)
+            user_state.pop(uid, None)
+            await message.answer("🗑 Дело #" + text + " удалено.", keyboard=admin_keyboard())
+        else:
+            await message.answer("❌ Дело не найдено.", keyboard=cancel_keyboard())
+    elif step == "edit_price":
+        save(PRICE_FILE, {"text": text})
+        user_state.pop(uid, None)
+        await message.answer("✅ Прайс обновлён!", keyboard=admin_keyboard())
+    elif step == "edit_profile":
+        save(PROFILE_FILE, {"text": text})
+        user_state.pop(uid, None)
+        await message.answer("✅ Резюме обновлено!", keyboard=admin_keyboard())
+
+
+if __name__ == "__main__":
+    print("🤖 VK-бот запущен!")
+    bot.run_forever()
