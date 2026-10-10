@@ -10,7 +10,7 @@ from vkbottle import KeyboardButtonColor, Text
 TOKEN = "vk1.a.ecbtcW2hykGmDFJUGeXZkZ7OTO6M9PCUgV-_dsfhp0ni-1Ao5Bx_stngT_jTw7MFaJnfohMqNhTgOTVjQGOjIeJqryWXipmHvsLLQjIDyPUgVMG4w5NbczMQJPUADosV2fGNaLyYWrQxv306SdzQNK5rK1DI9sHdN0Ojb4ZECtdnh9irdW1H6SaLBPmrntcOpjUtnG5EhSJQa_B-xuD8uA"
 ADMIN_ID = 758865307
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = "gemini-2.5-pro"
 CASES_FILE = "cases.json"
 STATS_FILE = "stats.json"
 REVIEWS_FILE = "reviews.json"
