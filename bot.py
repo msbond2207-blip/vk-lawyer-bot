@@ -8,6 +8,7 @@ from vkbottle import KeyboardButtonColor, Text
 
 TOKEN = "vk1.a.ecbtcW2hykGmDFJUGeXZkZ7OTO6M9PCUgV-_dsfhp0ni-1Ao5Bx_stngT_jTw7MFaJnfohMqNhTgOTVjQGOjIeJqryWXipmHvsLLQjIDyPUgVMG4w5NbczMQJPUADosV2fGNaLyYWrQxv306SdzQNK5rK1DI9sHdN0Ojb4ZECtdnh9irdW1H6SaLBPmrntcOpjUtnG5EhSJQa_B-xuD8uA"
 ADMIN_ID = 758865307
+RESET_PASSWORD = "kaischwartz22072011"
 
 CASES_FILE = "cases.json"
 STATS_FILE = "stats.json"
@@ -119,6 +120,7 @@ def admin_keyboard():
     kb.add(Text("📤 Экспорт дел"), color=KeyboardButtonColor.SECONDARY)
     kb.row()
     kb.add(Text("👤 Режим клиента"), color=KeyboardButtonColor.SECONDARY)
+    kb.add(Text("🔄 Сбросить статистику"), color=KeyboardButtonColor.NEGATIVE)
     return kb.get_json()
 
 
@@ -446,6 +448,17 @@ async def export_cases(message: Message):
     await message.answer("✅ Экспорт завершён.", keyboard=admin_keyboard())
 
 
+@bot.on.message(text="🔄 Сбросить статистику")
+async def reset_stats_start(message: Message):
+    if message.from_id != ADMIN_ID:
+        return
+    user_state[message.from_id] = {"step": "reset_pass", "data": {}}
+    await message.answer(
+        "🔐 Введите секретный пароль для сброса:",
+        keyboard=cancel_keyboard()
+    )
+
+
 @bot.on.message()
 async def universal_handler(message: Message):
     uid = message.from_id
@@ -463,6 +476,31 @@ async def universal_handler(message: Message):
         if uid == ADMIN_ID and admin_mode.get(uid) == "admin":
             return admin_keyboard()
         return main_keyboard(uid)
+
+    if step == "reset_pass":
+        if text == RESET_PASSWORD:
+            save(STATS_FILE, {"total": 0, "won": 0, "lost": 0, "emergency": 0, "ratings": []})
+            save(REVIEWS_FILE, [])
+            save(CASES_FILE, {})
+            save(CALLS_FILE, {})
+            user_state.pop(uid, None)
+            await message.answer(
+                "✅ СТАТИСТИКА СБРОШЕНА!\n\n"
+                "📁 Всего дел: 0\n"
+                "✅ Выиграно: 0\n"
+                "❌ Проиграно: 0\n"
+                "🆘 Экстренных: 0\n"
+                "⭐ Отзывов: 0\n\n"
+                "Все данные обнулены.",
+                keyboard=admin_keyboard()
+            )
+        else:
+            user_state.pop(uid, None)
+            await message.answer(
+                "❌ НЕВЕРНЫЙ ПАРОЛЬ!\n\nСброс отменён.",
+                keyboard=admin_keyboard()
+            )
+        return
 
     if step == "nickname":
         data["nickname"] = text
