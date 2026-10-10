@@ -104,21 +104,20 @@ def admin_keyboard():
     kb.add(Text("🆘 Журнал вызовов"), color=KeyboardButtonColor.PRIMARY)
     kb.row()
     kb.add(Text("⚙️ Взять дело"), color=KeyboardButtonColor.SECONDARY)
-    kb.add(Text("✅ Закрыть дело"), color=KeyboardButtonColor.SECONDARY)
-    kb.row()
     kb.add(Text("✅ Выиграно"), color=KeyboardButtonColor.POSITIVE)
-    kb.add(Text("❌ Проиграно"), color=KeyboardButtonColor.NEGATIVE)
     kb.row()
-    kb.add(Text("➕ Добавить в портфолио"), color=KeyboardButtonColor.SECONDARY)
+    kb.add(Text("❌ Проиграно"), color=KeyboardButtonColor.NEGATIVE)
     kb.add(Text("🗑 Удалить дело"), color=KeyboardButtonColor.NEGATIVE)
     kb.row()
+    kb.add(Text("➕ Добавить в портфолио"), color=KeyboardButtonColor.SECONDARY)
     kb.add(Text("✏️ Изменить прайс"), color=KeyboardButtonColor.SECONDARY)
+    kb.row()
     kb.add(Text("✏️ Изменить резюме"), color=KeyboardButtonColor.SECONDARY)
-    kb.row()
     kb.add(Text("📊 Моя статистика"), color=KeyboardButtonColor.SECONDARY)
-    kb.add(Text("⭐ Все отзывы"), color=KeyboardButtonColor.SECONDARY)
     kb.row()
+    kb.add(Text("⭐ Все отзывы"), color=KeyboardButtonColor.SECONDARY)
     kb.add(Text("📤 Экспорт дел"), color=KeyboardButtonColor.SECONDARY)
+    kb.row()
     kb.add(Text("👤 Режим клиента"), color=KeyboardButtonColor.SECONDARY)
     return kb.get_json()
 
@@ -136,13 +135,6 @@ def evidence_keyboard():
     kb.row()
     kb.add(Text("👥 Свидетели"))
     kb.add(Text("❌ Доказательств нет"))
-    return kb.get_json()
-
-
-def close_result_keyboard():
-    kb = Keyboard(one_time=True)
-    kb.add(Text("✅ Выиграно"), color=KeyboardButtonColor.POSITIVE)
-    kb.add(Text("❌ Проиграно"), color=KeyboardButtonColor.NEGATIVE)
     return kb.get_json()
 
 
@@ -376,14 +368,6 @@ async def take_case_start(message: Message):
         return
     user_state[message.from_id] = {"step": "take_id", "data": {}}
     await message.answer("Введите номер дела:", keyboard=cancel_keyboard())
-
-
-@bot.on.message(text="✅ Закрыть дело")
-async def close_case_start(message: Message):
-    if message.from_id != ADMIN_ID:
-        return
-    user_state[message.from_id] = {"step": "close_id", "data": {}}
-    await message.answer("Введите номер дела для закрытия:", keyboard=cancel_keyboard())
 
 
 @bot.on.message(text="✅ Выиграно")
@@ -626,39 +610,6 @@ async def universal_handler(message: Message):
             await message.answer("⚙️ Дело #" + text + " в работе!", keyboard=admin_keyboard())
         else:
             await message.answer("❌ Дело не найдено.", keyboard=cancel_keyboard())
-    elif step == "close_id":
-        cases = load(CASES_FILE, {})
-        if text in cases:
-            data["case_id"] = text
-            state["step"] = "close_result"
-            kb = close_result_keyboard()
-            await message.answer("Дело #" + text + " закрыто. Итог?", keyboard=kb)
-        else:
-            await message.answer("❌ Дело не найдено.", keyboard=cancel_keyboard())
-    elif step == "close_result":
-        case_id = state["data"].get("case_id", "")
-        if text == "✅ Выиграно":
-            stats = load(STATS_FILE, {"total": 0, "won": 0, "lost": 0, "emergency": 0, "ratings": []})
-            stats["won"] += 1
-            save(STATS_FILE, stats)
-            cases = load(CASES_FILE, {})
-            if case_id in cases:
-                cases[case_id]["status"] = "closed"
-                save(CASES_FILE, cases)
-            user_state.pop(uid, None)
-            await message.answer("🏆 Дело #" + case_id + " ВЫИГРАНО!", keyboard=admin_keyboard())
-        elif text == "❌ Проиграно":
-            stats = load(STATS_FILE, {"total": 0, "won": 0, "lost": 0, "emergency": 0, "ratings": []})
-            stats["lost"] += 1
-            save(STATS_FILE, stats)
-            cases = load(CASES_FILE, {})
-            if case_id in cases:
-                cases[case_id]["status"] = "closed"
-                save(CASES_FILE, cases)
-            user_state.pop(uid, None)
-            await message.answer("❌ Дело #" + case_id + " проиграно.", keyboard=admin_keyboard())
-        else:
-            await message.answer("Нажмите «✅ Выиграно» или «❌ Проиграно».", keyboard=close_result_keyboard())
     elif step == "result_won":
         case_id = text.strip()
         cases = load(CASES_FILE, {})
